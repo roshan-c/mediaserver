@@ -25,8 +25,8 @@ services:
       - VPN_SERVICE_PROVIDER=windscribe
       - VPN_TYPE=openvpn
       # OpenVPN:
-      - OPENVPN_USER=ly2mqvr8-4tdbz2y
-      - OPENVPN_PASSWORD=fj4engs659
+      - OPENVPN_USER=
+      - OPENVPN_PASSWORD=
       - SERVER_REGIONS='United Kingdom'
       # Wireguard:
       # - WIREGUARD_PRIVATE_KEY=wOEI9rqqbDwnN8/Bpp22sVz48T71vJ4fYmFWujulwUU=
