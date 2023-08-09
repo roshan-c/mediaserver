@@ -1,0 +1,159 @@
+version: "3"
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    # line above must be uncommented to allow external containers to connect.
+    # See https://github.com/qdm12/gluetun-wiki/blob/main/setup/connect-a-container-to-gluetun.md#external-container-to-gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 8888:8888/tcp # HTTP proxy
+      - 8388:8388/tcp # Shadowsocks
+      - 8388:8388/udp # Shadowsocks
+      - 8090:8090 # qbittorrent Web UI
+      - 6881:6881 # qbittorrent
+      - 6881:6881/udp # qbittorrent
+      - 9117:9117 # jackett
+
+    volumes:
+      - /volume1/docker/gluetun:/gluetun
+    environment:
+      # See https://github.com/qdm12/gluetun-wiki/tree/main/setup#setup
+      - VPN_SERVICE_PROVIDER=windscribe
+      - VPN_TYPE=openvpn
+      # OpenVPN:
+      - OPENVPN_USER=ly2mqvr8-4tdbz2y
+      - OPENVPN_PASSWORD=fj4engs659
+      - SERVER_REGIONS='United Kingdom'
+      # Wireguard:
+      # - WIREGUARD_PRIVATE_KEY=wOEI9rqqbDwnN8/Bpp22sVz48T71vJ4fYmFWujulwUU=
+      # - WIREGUARD_ADDRESSES=10.64.222.21/32
+      # Timezone for accurate log times
+      - TZ=Europe/London
+      # See https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#update-the-vpn-servers-list
+
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    network_mode: host
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - VERSION=docker
+      - PLEX_CLAIM= #optional
+    volumes:
+      - /volume1/docker/plex/config:/config
+      - /mnt/ntfs/completed/TV:/tv
+      - /mnt/ntfs/completed/FILMS:/movies
+    devices:
+     - /dev/dri:/dev/dri
+    restart: unless-stopped
+    
+  qbittorrent:
+    image: linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=1026
+      - PGID=101
+      - TZ=Europe/London
+      - UMASK=022
+      - WEBUI_PORT=8090
+    volumes:
+      - /volume1/docker/qbittorrent/config:/config
+      - /mnt/ntfs/completed:/downloads
+      - /mnt/ntfs/completed/TV:/tvdownloads
+      - /mnt/ntfs/completed/FILMS:/filmdownloads
+      - /mnt/ntfs/music:/musicdownloads
+    network_mode: 'service:gluetun'
+    labels:
+      - autoheal=true
+    healthcheck:
+      test: curl google.com || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  jackett:
+    image: linuxserver/jackett:latest
+    container_name: vpn-jackett
+    environment:
+      - PUID=1026
+      - PGID=101
+      - TZ=Europe/London
+    volumes:
+      - /volume1/docker/jackett/config:/config
+    network_mode: 'service:gluetun'
+    labels:
+      - autoheal=true
+      # - com.centurylinklabs.watchtower.depends-on=vpn
+    healthcheck:
+      test: curl google.com || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=1026
+      - PGID=101
+      - TZ=Europe/London
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /volume1/docker/sonarr/config:/config
+      - /mnt/ntfs/completed/TV:/tv
+      - /volume1/MediaServer/video/TvDownloads:/downloads
+    restart: unless-stopped
+    depends_on:
+      - jackett
+      - qbittorrent
+    ports:
+      - 8989:8989
+
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1026
+      - PGID=101
+      - TZ=Europe/London
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /volume1/docker/radarr3/config:/config
+      - /mnt/ntfs/completed/FILMS:/movies
+      - /volume1/MediaServer/video/FilmDownloads:/downloads
+    restart: unless-stopped
+    depends_on:
+      - jackett
+      - qbittorrent
+    ports:
+      - 7878:7878
+
+  overseerr:
+    image: sctx/overseerr:latest
+    container_name: overseerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=Europe/London
+      - PORT=5055 #optional
+    ports:
+      - 5055:5055
+    volumes:
+      - /volume1/docker/overseerr:/app/config
+    restart: unless-stopped
+
+  rarbg-selfhosted:
+    container_name: rarbg-selfhosted
+    image: "ghcr.io/mgdigital/rarbg-selfhosted:latest"
+    volumes:
+      - "/volume1/docker/rarbg/rarbg_db.sqlite:/rarbg_db.sqlite"
+    ports:
+      - "3333:3333"
+    restart: unless-stopped
